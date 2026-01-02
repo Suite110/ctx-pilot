@@ -1,0 +1,77 @@
+{
+  "name": "ctx-pilot",
+  "version": "0.9.0",
+  "description": "Stop repeating yourself to AI. Auto-suggests relevant files before every prompt. Works with Claude Code, Gemini CLI, Cursor, Windsurf, and Aider.",
+  "type": "module",
+  "main": "dist/cli.js",
+  "types": "dist/cli.d.ts",
+  "bin": {
+    "ctx-pilot": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "LICENSE-COMMERCIAL",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint": "eslint src/",
+    "prepublishOnly": "npm run build && npm run test:run"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "gemini",
+    "gemini-cli",
+    "cursor",
+    "windsurf",
+    "aider",
+    "context",
+    "ai",
+    "llm",
+    "coding-assistant",
+    "hook"
+  ],
+  "author": {
+    "name": "Stephen Gobin",
+    "url": "https://github.com/stephen-gobin"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Suite110/ctx-pilot.git"
+  },
+  "homepage": "https://github.com/Suite110/ctx-pilot#readme",
+  "bugs": {
+    "url": "https://github.com/Suite110/ctx-pilot/issues"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "fast-glob": "^3.3.0",
+    "ignore": "^5.3.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ]
+}

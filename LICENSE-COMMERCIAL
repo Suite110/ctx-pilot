@@ -1,0 +1,32 @@
+# Commercial License for ctx-pilot
+
+Copyright (c) 2025 Stephen Gobin
+
+## When Commercial License is Required
+
+A commercial license is required if you:
+
+1. Use ctx-pilot in a closed-source product
+2. Embed ctx-pilot in a SaaS offering where it is a core feature
+3. Are a company with >$1M annual revenue using ctx-pilot in production
+4. Redistribute ctx-pilot in commercial products
+
+## How to Obtain
+
+For commercial licensing inquiries, please open an issue at:
+https://github.com/Suite110/ctx-pilot/issues
+
+Or contact the author directly through GitHub.
+
+## Terms
+
+Commercial licenses are negotiated on a case-by-case basis and may include:
+
+- Perpetual or subscription licensing options
+- Support and maintenance agreements
+- Custom feature development
+- Priority bug fixes
+
+## Open Source Alternative
+
+If your use case qualifies for the MIT License (personal, educational, or open source use), no commercial license is needed. See the LICENSE file for MIT License terms.

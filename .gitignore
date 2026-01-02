@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Claude Code local settings
+.claude/
+CLAUDE.md
+
+# Build output
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# ctx-pilot generated files (for testing)
+.context/
+.cursorrules
+.windsurfrules
+.aider.context.md
+
+# Env files
+.env
+.env.local
+
+# Package tarballs
+*.tgz
