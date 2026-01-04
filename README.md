@@ -23,7 +23,7 @@ Sound familiar? Context gets lost. You repeat yourself. Momentum dies.
 
 ## The Solution
 
-ctx-pilot automatically suggests relevant files before every prompt. Claude reads them and stays informed.
+ctx-pilot suggests relevant files when you need them. Claude reads them and stays informed.
 
 ```
 You: "Update the Widget component"
@@ -51,6 +51,9 @@ Claude: "I'll update the Widget component. Based on the props defined in
 
 - **File suggestions, not content injection** - Claude reads files itself, keeping you in control
 - **Section-aware indexing** - Points to specific functions and headers, not entire files
+- **Smart search** - Stemming and fuzzy matching find what you mean, not just what you type
+- **Smart skip** - Stays silent when there's nothing useful to add
+- **Automatic indexing** - Built-in parsers for 20+ languages, no AI required
 - **Works offline** - Everything runs locally, no API keys or accounts needed
 - **Graceful degradation** - If something breaks, your AI tool works exactly as before
 
@@ -59,16 +62,21 @@ Claude: "I'll update the Widget component. Based on the props defined in
 ## Quick Start
 
 ```bash
-# Install
-npm install -g ctx-pilot
-
-# Set up in your project
 npx ctx-pilot init
-
-# Restart Claude Code
 ```
 
-That's it. ctx-pilot now runs before every prompt, suggesting relevant files based on what you're working on.
+Restart your AI CLI, then ask:
+
+```
+Follow the instructions in .context/optimize.md
+```
+
+Your AI analyzes your codebase and builds an optimized index. Done - ctx-pilot now suggests relevant files before every prompt.
+
+**Alternative (instant setup):** If you want to skip the AI step:
+```bash
+npx ctx-pilot auto-index
+```
 
 ---
 
@@ -106,29 +114,17 @@ All invisible. All automatic. No commands to remember.
 npx ctx-pilot init
 ```
 
-ctx-pilot auto-detects your environment (Claude or Gemini) and installs the appropriate hook.
+Restart your AI CLI, then ask: `Follow the instructions in .context/optimize.md`
 
-Restart your AI CLI to activate.
+Your AI builds an optimized, section-aware index of your codebase.
 
-### Manual Setup
+### Manual Hook Install
 
-If you prefer control:
+If you need to install the hook separately:
 
 ```bash
-# 1. Create config
-echo '{
-  "pinned": ["docs/core-concepts.md"],
-  "include": ["**/*.md", "**/*.ts"],
-  "exclude": []
-}' > .context/config.json
-
-# 2. Build index
-npx ctx-pilot index
-
-# 3. Install hook
-npx ctx-pilot hook
-
-# 4. Restart Claude Code
+npx ctx-pilot hook --claude   # For Claude Code
+npx ctx-pilot hook --gemini   # For Gemini CLI
 ```
 
 ---
@@ -141,9 +137,7 @@ Edit `.context/config.json`:
 {
   "pinned": ["docs/core-concepts.md", "docs/glossary.md"],
   "include": ["**/*.md", "**/*.ts", "**/*.py"],
-  "exclude": ["node_modules/**", "dist/**"],
-  "tokenBudget": 32000,
-  "maxContextPercentage": 50
+  "exclude": ["node_modules/**", "dist/**"]
 }
 ```
 
@@ -152,21 +146,155 @@ Edit `.context/config.json`:
 | `pinned` | Files suggested on every prompt (your core docs) |
 | `include` | What to index (glob patterns) |
 | `exclude` | What to skip |
-| `tokenBudget` | Max tokens for context |
-| `maxContextPercentage` | Max % of available context to use |
+
+---
+
+## Customizing for Your Project
+
+The default config indexes markdown files only. Here's how to tailor ctx-pilot to your codebase.
+
+### Step 1: Decide What to Index
+
+Think about what files contain useful context:
+
+- **Source code** - Functions, classes, components
+- **Documentation** - READMEs, guides, API docs
+- **Tests** - Show expected behavior and edge cases
+- **Config files** - Project structure and settings
+
+Update your `include` patterns:
+
+```json
+{
+  "include": [
+    "**/*.md",
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ]
+}
+```
+
+Common patterns:
+- `**/*.md` - All markdown files
+- `src/**/*.ts` - TypeScript in src folder
+- `docs/**/*` - Everything in docs folder
+- `*.json` - JSON files in root only
+
+### Step 2: Exclude Noise
+
+Keep generated files and dependencies out:
+
+```json
+{
+  "exclude": [
+    "node_modules/**",
+    "dist/**",
+    "build/**",
+    "coverage/**",
+    "*.min.js"
+  ]
+}
+```
+
+### Step 3: Pin Your Core Docs
+
+Pinned files appear in every suggestion. Use sparingly - these are your "always relevant" files:
+
+```json
+{
+  "pinned": [
+    "CLAUDE.md",
+    "docs/architecture.md"
+  ]
+}
+```
+
+Good candidates:
+- Project overview docs
+- Architecture decisions
+- Coding conventions
+- Glossaries
+
+### Step 4: Build the Index
+
+Ask your AI to build the index:
+
+```
+Follow the instructions in .context/optimize.md
+```
+
+Your AI analyzes your codebase and creates a section-aware index with:
+- Meaningful section titles
+- Rich keywords including synonyms
+- Descriptive previews explaining what code does
+
+**Alternative (quick baseline):** For instant setup without AI:
+
+```bash
+npx ctx-pilot auto-index
+```
+
+This uses built-in parsers to extract functions, classes, and headers. Works immediately but produces more generic results.
+
+### Advanced: Domain Stopwords
+
+If certain words appear everywhere in your project and aren't useful for search, filter them out:
+
+```json
+{
+  "pinned": ["CLAUDE.md"],
+  "include": ["**/*.md", "src/**/*.ts"],
+  "exclude": ["node_modules/**"],
+  "domainStopwords": ["myapp", "widget", "util"]
+}
+```
+
+Use this when common project terms are drowning out more specific matches.
+
+### Example: Full Config
+
+Here's a complete config for a TypeScript project:
+
+```json
+{
+  "pinned": ["CLAUDE.md", "docs/architecture.md"],
+  "include": [
+    "**/*.md",
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules/**",
+    "dist/**",
+    "coverage/**"
+  ],
+  "domainStopwords": ["myproject"]
+}
+```
+
+After saving, rebuild and verify:
+
+```bash
+npx ctx-pilot auto-index
+npx ctx-pilot validate
+npx ctx-pilot status
+```
 
 ---
 
 ## CLI Commands
 
-### Setup & Status
+### Setup & Indexing
 
 ```bash
 npx ctx-pilot init            # Set up config and install hook
 npx ctx-pilot status          # Show config, index, hooks, and exports
-npx ctx-pilot index           # Rebuild the index
-npx ctx-pilot index --force   # Force full rebuild
+npx ctx-pilot validate        # Check index for issues
+npx ctx-pilot auto-index      # Build index automatically (fallback)
+npx ctx-pilot auto-index -v   # Build with verbose output
 ```
+
+The primary way to build the index is asking your AI: `Follow the instructions in .context/optimize.md`
 
 ### Dynamic Hooks (Claude Code, Gemini CLI)
 
@@ -190,49 +318,81 @@ npx ctx-pilot export --mdc        # Generate .cursor/rules/ctx-pilot.mdc
 npx ctx-pilot export --all        # Generate all exports
 ```
 
-### Watch Mode
-
-Auto-regenerate exports when files change.
-
-```bash
-npx ctx-pilot watch --cursor      # Watch and update .cursorrules
-npx ctx-pilot watch --windsurf    # Watch and update .windsurfrules
-npx ctx-pilot watch --aider       # Watch and update .aider.context.md
-npx ctx-pilot watch --all         # Watch and update all exports
-```
-
 ---
 
-## Supported Languages
+## How Indexing Works
 
-ctx-pilot understands structure in:
+ctx-pilot uses **AI-driven indexing**. Your AI analyzes your codebase and builds a section-aware index:
 
-**Code:**
-| Language | Indexed as sections |
-|----------|---------------------|
-| TypeScript/JavaScript | Functions, classes, interfaces |
-| Python | Functions, classes |
-| Go | Functions, structs, interfaces |
-| Rust | Functions, structs, enums, traits, impls |
-| Java/Kotlin | Classes, interfaces, methods |
-| C# | Classes, structs, interfaces, methods |
-| C/C++ | Functions, structs, classes, macros |
-| Ruby | Classes, modules, methods |
-| PHP | Classes, interfaces, traits, functions |
-| Swift | Classes, structs, protocols, funcs |
-| Dart | Classes, mixins, functions |
-| Shell/Bash | Functions, exports |
-| HLSL/GLSL/WGSL | Functions, structs |
+### AI Indexing (Recommended)
 
-**Docs & Config:**
-| Format | Indexed as sections |
-|--------|---------------------|
-| Markdown | Headers (H1, H2, H3) |
-| reStructuredText | Headers (underlined) |
-| AsciiDoc | Headers (= syntax) |
-| YAML/JSON | Top-level keys |
-| TOML | Tables and sections |
-| XML/HTML | Top-level elements |
+```
+Follow the instructions in .context/optimize.md
+```
+
+Your AI:
+- Understands your code semantically, not just syntactically
+- Creates meaningful section titles and previews
+- Adds rich keywords including synonyms and related terms
+- Identifies what actually matters in your codebase
+
+This produces the best results because your AI understands context.
+
+### Automatic Indexing (Fallback)
+
+For instant setup without AI involvement:
+
+```bash
+npx ctx-pilot auto-index
+```
+
+Built-in parsers extract sections from 20+ file types:
+- **Markdown** - Headers and code blocks
+- **JavaScript/TypeScript** - Functions, classes, interfaces, types
+- **Python** - Functions and classes
+- **Go, Rust, Java, C#, Ruby, Swift, PHP, Shell** - Functions and types
+- **Structured data** - YAML, JSON, TOML sections
+
+This works immediately but produces more generic results (function names as titles, extracted keywords rather than curated ones).
+
+### Smart Search
+
+ctx-pilot uses intelligent matching to find relevant sections:
+- **Stemming** - "authentication" matches "authenticate", "auth"
+- **Fuzzy matching** - Typos like "authentification" still match
+- **Weighted scoring** - Title matches rank higher than keyword matches
+
+### Smart Skip
+
+ctx-pilot stays silent when it has nothing useful to add:
+- Short prompts with few searchable terms (like "thanks" or "looks good") produce no output
+- Low-confidence matches are filtered out
+- Only results above a relevance threshold are shown
+
+This prevents noise - you only see suggestions when they're actually helpful.
+
+### Stale File Detection
+
+ctx-pilot automatically detects when indexed files have changed:
+
+```
+**Relevant to your task:**
+- src/auth.ts (lines 12-45) - function login ⚠️
+
+⚠️ Before answering, update .context/index.json for files marked ⚠️.
+```
+
+Claude automatically updates the index for stale files before responding - no action needed from you.
+
+### Validation
+
+Check your index for issues:
+
+```bash
+npx ctx-pilot validate
+```
+
+This checks for missing pinned files, invalid line numbers, empty keywords, and orphaned entries.
 
 ---
 
@@ -240,12 +400,24 @@ ctx-pilot understands structure in:
 
 **Nothing happening?**
 - Run `npx ctx-pilot status` to check setup
+- Make sure you ran `npx ctx-pilot auto-index`
 - Restart Claude Code after installing
 
 **Wrong suggestions?**
 - Add important files to `pinned`
 - Adjust `include`/`exclude` patterns
-- Run `npx ctx-pilot index --force`
+- Rebuild with `npx ctx-pilot auto-index`
+- Check for issues with `npx ctx-pilot validate`
+
+**Seeing ⚠️ warnings?**
+- Files changed since the index was built
+- Claude updates the index automatically before answering
+- Or rebuild manually with `npx ctx-pilot auto-index`
+
+**No suggestions appearing?**
+- This is often intentional - ctx-pilot stays silent when there's nothing useful to add
+- Try prompts with specific terms (function names, file paths, technical concepts)
+- Check `npx ctx-pilot status` to verify the hook is installed and index exists
 
 **ctx-pilot stops working?**
 - It fails gracefully - your AI tool works exactly as before, just without suggestions
@@ -269,10 +441,8 @@ ctx-pilot runs **100% locally**. No telemetry, no analytics, no network requests
 
 ctx-pilot is designed to be invisible:
 
-- **Index build**: < 2 seconds for most projects
 - **Hook execution**: < 100ms per prompt
 - **Memory**: Minimal - index stored on disk
-- **Watch mode**: Debounced updates, low CPU usage
 
 ---
 
@@ -282,7 +452,6 @@ Found a bug? Have an idea? Contributions welcome!
 
 - **Issues**: [Report bugs or request features](https://github.com/Suite110/ctx-pilot/issues)
 - **PRs**: Fork, branch, submit
-- **Parsers**: Add support for new languages in `src/indexer/parsers/`
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
@@ -294,7 +463,7 @@ If ctx-pilot saves you time, consider supporting its development:
 
 - ⭐ **Star the repo** - Helps others discover it
 - 🐛 **Report issues** - Help make it better
-- 💻 **Contribute code** - New features, parsers, fixes
+- 💻 **Contribute code** - New features, bug fixes
 - 💬 **Spread the word** - Tweet, blog, tell your team
 - ❤️ **Sponsor** - [GitHub Sponsors](https://github.com/sponsors/stephen-gobin)
 

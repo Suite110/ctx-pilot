@@ -49,8 +49,6 @@ describe('config module', () => {
       expect(config.pinned).toEqual([]);
       expect(config.include).toEqual(['**/*.md']);
       expect(config.exclude).toEqual([]);
-      expect(config.tokenBudget).toBe(32000);
-      expect(config.maxContextPercentage).toBe(50);
     });
   });
 
@@ -60,8 +58,6 @@ describe('config module', () => {
         pinned: ['file1.md', 'file2.md'],
         include: ['**/*.md', '**/*.ts'],
         exclude: ['node_modules/**'],
-        tokenBudget: 16000,
-        maxContextPercentage: 75,
       };
 
       const validated = validateConfig(config);
@@ -74,17 +70,7 @@ describe('config module', () => {
 
       expect(validated.pinned).toEqual([]);
       expect(validated.include).toEqual(['**/*.md']);
-      expect(validated.tokenBudget).toBe(32000);
-    });
-
-    it('should reject invalid tokenBudget', () => {
-      expect(() => validateConfig({ tokenBudget: -100 })).toThrow();
-      expect(() => validateConfig({ tokenBudget: 500000 })).toThrow();
-    });
-
-    it('should reject invalid maxContextPercentage', () => {
-      expect(() => validateConfig({ maxContextPercentage: 0 })).toThrow();
-      expect(() => validateConfig({ maxContextPercentage: 101 })).toThrow();
+      expect(validated.exclude).toEqual([]);
     });
 
     it('should reject non-array pinned', () => {
@@ -118,8 +104,6 @@ describe('config module', () => {
         pinned: ['test.md'],
         include: ['**/*.md'],
         exclude: [],
-        tokenBudget: 16000,
-        maxContextPercentage: 60,
       };
 
       await saveConfig(testDir, config);
@@ -139,8 +123,6 @@ describe('config module', () => {
         pinned: ['docs/guide.md'],
         include: ['**/*.md', '**/*.txt'],
         exclude: ['archive/**'],
-        tokenBudget: 20000,
-        maxContextPercentage: 40,
       };
 
       await saveConfig(testDir, config);
@@ -169,7 +151,7 @@ describe('config module', () => {
 
       expect(loaded.pinned).toEqual(['file.md']);
       expect(loaded.include).toEqual(['**/*.md']);
-      expect(loaded.tokenBudget).toBe(32000);
+      expect(loaded.exclude).toEqual([]);
     });
   });
 
@@ -181,8 +163,6 @@ describe('config module', () => {
         pinned: ['../../../etc/passwd'],
         include: ['**/*.md'],
         exclude: [],
-        tokenBudget: 32000,
-        maxContextPercentage: 50,
       };
 
       // Should save without error (validation is at access time)

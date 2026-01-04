@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { searchSections, findExactMatches } from '../../src/search/index.js';
+import { searchSections } from '../../src/search/index.js';
 import type { ProjectIndex } from '../../src/types.js';
 
 // Helper to create a test index
@@ -185,20 +185,6 @@ describe('searchSections', () => {
 
       expect(results).toHaveLength(3);
     });
-
-    it('should respect maxTokens option', () => {
-      const index = createTestIndex([
-        { path: 'f1.md', sections: [{ title: 'Small', preview: 'test', keywords: ['test'], tokens: 100 }] },
-        { path: 'f2.md', sections: [{ title: 'Medium', preview: 'test', keywords: ['test'], tokens: 200 }] },
-        { path: 'f3.md', sections: [{ title: 'Large', preview: 'test', keywords: ['test'], tokens: 500 }] },
-      ]);
-
-      const results = searchSections(index, 'test', { maxTokens: 350 });
-
-      // Should fit Small (100) + Medium (200) = 300, but not Large (500)
-      const totalTokens = results.reduce((sum, r) => sum + r.section.tokens, 0);
-      expect(totalTokens).toBeLessThanOrEqual(350);
-    });
   });
 
   describe('multi-word queries', () => {
@@ -222,54 +208,5 @@ describe('searchSections', () => {
 
       expect(results).toHaveLength(2);
     });
-  });
-});
-
-describe('findExactMatches', () => {
-  it('should find exact phrase in title', () => {
-    const index = createTestIndex([
-      {
-        path: 'file.md',
-        sections: [
-          { title: 'User Authentication Flow', preview: 'content', keywords: [] },
-          { title: 'Database Setup', preview: 'content', keywords: [] },
-        ],
-      },
-    ]);
-
-    const results = findExactMatches(index, 'Authentication');
-
-    expect(results).toHaveLength(1);
-    expect(results[0].section.title).toBe('User Authentication Flow');
-  });
-
-  it('should be case insensitive', () => {
-    const index = createTestIndex([
-      {
-        path: 'file.md',
-        sections: [
-          { title: 'USER GUIDE', preview: 'content', keywords: [] },
-        ],
-      },
-    ]);
-
-    const results = findExactMatches(index, 'user guide');
-
-    expect(results).toHaveLength(1);
-  });
-
-  it('should return empty for no matches', () => {
-    const index = createTestIndex([
-      {
-        path: 'file.md',
-        sections: [
-          { title: 'Something Else', preview: 'content', keywords: [] },
-        ],
-      },
-    ]);
-
-    const results = findExactMatches(index, 'not found');
-
-    expect(results).toHaveLength(0);
   });
 });

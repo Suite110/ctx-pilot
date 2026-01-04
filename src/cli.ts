@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile, mkdir, access } from 'fs/promises';
+import { readFile, writeFile, mkdir, access, stat } from 'fs/promises';
 import { join, dirname } from 'path';
-import { watch } from 'chokidar';
-import { loadConfig, configExists, saveConfig, getDefaultConfig, getContextDir } from './config/index.js';
-import { loadIndex, buildIndex, getIndexStats } from './indexer/index.js';
+import { loadConfig, configExists, saveConfig, getDefaultConfig } from './config/index.js';
+import { loadIndex, getIndexStats, buildAutoIndex, saveIndex } from './indexer/index.js';
 import { searchSections } from './search/index.js';
-import { extractTopics } from './search/keywords.js';
+import { extractTopics, setDomainStopwords } from './search/keywords.js';
+import { validateIndex, formatValidationResult } from './validation/index.js';
 import type { HookInput, ScoredSection, CtxPilotConfig, ProjectIndex } from './types.js';
 
 // Supported AI CLI environments (dynamic hooks)
@@ -178,22 +178,86 @@ ${config.pinned.map(f => `- ${f}`).join('\n')}
   },
 };
 
-const SETUP_INSTRUCTIONS = `## ctx-pilot Setup Required
+const OPTIMIZE_PROMPT = `# Build ctx-pilot Index
 
-Create a config file at \`.context/config.json\`:
+Analyze this codebase and build an optimized index for ctx-pilot.
 
+## Your Task
+
+1. **Review the codebase structure** - identify source files, documentation, tests, and config files
+
+2. **Update \`.context/config.json\`** with appropriate patterns:
+   \`\`\`json
+   {
+     "pinned": ["<core docs that are always relevant>"],
+     "include": ["<glob patterns for files to index>"],
+     "exclude": ["node_modules/**", "dist/**", "<other build artifacts>"]
+   }
+   \`\`\`
+
+3. **Build \`.context/index.json\`** by analyzing included files:
+   \`\`\`json
+   {
+     "version": "1.1.0",
+     "lastUpdated": "<ISO timestamp>",
+     "files": [{
+       "path": "<relative path>",
+       "sections": [{
+         "title": "<descriptive title>",
+         "lineStart": 1,
+         "lineEnd": 50,
+         "preview": "<what this section does, not just code>",
+         "keywords": ["<synonyms and related terms>"]
+       }]
+     }]
+   }
+   \`\`\`
+
+4. **Verify** with \`npx ctx-pilot validate\`
+
+## CRITICAL: Add Synonyms to Keywords
+
+The search only finds exact keyword matches. Users might search "login" but your code calls it "authenticate". **You must add synonyms.**
+
+For each section, ask: "What words might someone use to search for this?"
+
+| If the code says... | Also add keywords... |
+|---------------------|----------------------|
+| authenticate, auth | login, signin, logon, credential, session |
+| config, configuration | settings, options, preferences, setup |
+| error, exception | failure, throw, catch, fault, problem |
+| create | add, new, insert, make, build, generate |
+| delete | remove, destroy, drop, erase, clear |
+| update | edit, modify, change, patch, set |
+| user | account, profile, member, identity, person |
+| fetch, request | get, load, retrieve, query, call, api |
+| save | store, persist, write, cache |
+| validate | check, verify, ensure, assert, test |
+
+## Good vs Bad Examples
+
+**Good:**
 \`\`\`json
 {
-  "pinned": [],
-  "include": ["**/*.md"],
-  "exclude": [],
-  "tokenBudget": 32000,
-  "maxContextPercentage": 50
+  "title": "Authentication Middleware",
+  "preview": "Validates JWT tokens and attaches user to request context",
+  "keywords": ["auth", "authenticate", "login", "signin", "jwt", "token", "session", "credential", "verify"]
 }
 \`\`\`
 
-Or run \`npx ctx-pilot init\` to create a default config.
+**Bad:**
+\`\`\`json
+{
+  "title": "function authenticateUser",
+  "preview": "export async function authenticateUser(req, res, next) {",
+  "keywords": ["authenticateuser"]
+}
+\`\`\`
+
+The good example will match searches for "login", "auth", "session", "jwt", etc. The bad example only matches "authenticateuser".
 `;
+
+const SETUP_INSTRUCTIONS = `Run \`npx ctx-pilot init\` to set up.`;
 
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -210,6 +274,11 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function writeOptimizePrompt(projectRoot: string): Promise<void> {
+  const promptPath = join(projectRoot, '.context', 'optimize.md');
+  await writeFile(promptPath, OPTIMIZE_PROMPT, 'utf-8');
 }
 
 async function detectEnvironment(projectRoot: string): Promise<Environment> {
@@ -287,10 +356,10 @@ async function runExport(projectRoot: string, target: ExportTarget): Promise<voi
   }
 
   const config = await loadConfig(projectRoot);
-  let index = await loadIndex(projectRoot);
+  const index = await loadIndex(projectRoot);
   if (!index) {
-    console.log('Building index...');
-    index = await buildIndex(projectRoot, config, { force: true });
+    console.error('No index found. Ask your AI to: "Follow the instructions in .context/optimize.md"');
+    process.exit(1);
   }
 
   const exportConfig = EXPORT_CONFIGS[target];
@@ -305,81 +374,6 @@ async function runExport(projectRoot: string, target: ExportTarget): Promise<voi
   console.log(`Exported to ${exportConfig.outputPath} for ${exportConfig.name}`);
 }
 
-async function runWatch(projectRoot: string, targets: ExportTarget[]): Promise<void> {
-  if (!(await configExists(projectRoot))) {
-    console.error('Not configured. Run `npx ctx-pilot init` first.');
-    process.exit(1);
-  }
-
-  const config = await loadConfig(projectRoot);
-  const contextDir = getContextDir(projectRoot);
-
-  console.log(`Watching for changes...`);
-  console.log(`Targets: ${targets.map(t => EXPORT_CONFIGS[t].name).join(', ')}`);
-  console.log(`Patterns: ${config.include.join(', ')}`);
-  console.log('Press Ctrl+C to stop.\n');
-
-  // Initial export
-  for (const target of targets) {
-    await runExport(projectRoot, target);
-  }
-
-  // Set up watcher
-  const watcher = watch(config.include, {
-    cwd: projectRoot,
-    ignored: [
-      ...config.exclude,
-      '**/node_modules/**',
-      '**/.git/**',
-      '.context/**',
-      '.cursor/**',
-      '.cursorrules',
-      '.windsurfrules',
-      '.aider.context.md',
-    ],
-    ignoreInitial: true,
-    persistent: true,
-  });
-
-  let debounceTimer: NodeJS.Timeout | null = null;
-
-  const regenerate = async () => {
-    console.log(`\n[${new Date().toLocaleTimeString()}] Change detected, regenerating...`);
-
-    try {
-      // Rebuild index
-      const newIndex = await buildIndex(projectRoot, config, { force: true });
-      const stats = getIndexStats(newIndex);
-      console.log(`  Index: ${stats.files} files, ${stats.sections} sections`);
-
-      // Re-export all targets
-      for (const target of targets) {
-        const exportConfig = EXPORT_CONFIGS[target];
-        const outputPath = join(projectRoot, exportConfig.outputPath);
-        await mkdir(dirname(outputPath), { recursive: true });
-        const content = await exportConfig.format(config, newIndex, projectRoot);
-        await writeFile(outputPath, content, 'utf-8');
-        console.log(`  Updated ${exportConfig.outputPath}`);
-      }
-    } catch (error) {
-      console.error('  Error:', error);
-    }
-  };
-
-  watcher.on('all', (event, path) => {
-    // Debounce rapid changes
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(regenerate, 500);
-  });
-
-  // Keep process alive
-  process.on('SIGINT', () => {
-    console.log('\nStopping watch...');
-    watcher.close();
-    process.exit(0);
-  });
-}
-
 async function runInit(projectRoot: string, forceEnv?: Environment): Promise<void> {
   const env = forceEnv || await detectEnvironment(projectRoot);
   const envConfig = env !== 'unknown' ? ENVIRONMENTS[env] : null;
@@ -391,13 +385,10 @@ async function runInit(projectRoot: string, forceEnv?: Environment): Promise<voi
 
   const config = getDefaultConfig();
   await saveConfig(projectRoot, config);
-  console.log('Created .context/config.json with defaults:');
-  console.log(JSON.stringify(config, null, 2));
+  await writeOptimizePrompt(projectRoot);
 
-  console.log('\nBuilding index...');
-  const index = await buildIndex(projectRoot, config, { force: true });
-  const stats = getIndexStats(index);
-  console.log(`Indexed ${stats.files} files with ${stats.sections} sections.`);
+  console.log('Created .context/config.json');
+  console.log('Created .context/optimize.md');
 
   if (envConfig) {
     console.log(`\nDetected ${envConfig.name}. Installing hook...`);
@@ -407,19 +398,9 @@ async function runInit(projectRoot: string, forceEnv?: Environment): Promise<voi
     console.log('\nCould not detect AI CLI environment.');
     console.log('Run `npx ctx-pilot hook --claude` or `npx ctx-pilot hook --gemini` to install.');
   }
-}
 
-async function runIndex(projectRoot: string, force: boolean): Promise<void> {
-  if (!(await configExists(projectRoot))) {
-    console.error('Not configured. Run `npx ctx-pilot init` first.');
-    process.exit(1);
-  }
-
-  const config = await loadConfig(projectRoot);
-  console.log('Building index...');
-  const index = await buildIndex(projectRoot, config, { force });
-  const stats = getIndexStats(index);
-  console.log(`Indexed ${stats.files} files with ${stats.sections} sections.`);
+  console.log('\nTo build the index, ask your AI to:');
+  console.log('  "Follow the instructions in .context/optimize.md"');
 }
 
 async function runStatus(projectRoot: string): Promise<void> {
@@ -480,8 +461,80 @@ async function runStatus(projectRoot: string): Promise<void> {
   }
 }
 
-function formatSuggestions(pinnedFiles: string[], results: ScoredSection[], maxSuggestions = 5): string {
+async function runAutoIndex(projectRoot: string, options: { verbose?: boolean }): Promise<void> {
+  if (!(await configExists(projectRoot))) {
+    console.error('Not configured. Run `npx ctx-pilot init` first.');
+    process.exit(1);
+  }
+
+  const config = await loadConfig(projectRoot);
+
+  console.log('Building auto-index...');
+  if (options.verbose) {
+    console.log('');
+  }
+
+  const index = await buildAutoIndex(projectRoot, config, { verbose: options.verbose });
+  await saveIndex(projectRoot, index);
+
+  const stats = getIndexStats(index);
+  console.log(`\nAuto-index complete!`);
+  console.log(`  Files: ${stats.files}`);
+  console.log(`  Sections: ${stats.sections}`);
+  console.log(`\nTip: AI can enhance this index with better keywords and previews.`);
+  console.log(`Run \`npx ctx-pilot validate\` to check for issues.`);
+}
+
+async function runValidate(projectRoot: string): Promise<void> {
+  if (!(await configExists(projectRoot))) {
+    console.error('Not configured. Run `npx ctx-pilot init` first.');
+    process.exit(1);
+  }
+
+  const config = await loadConfig(projectRoot);
+  const index = await loadIndex(projectRoot);
+
+  if (!index) {
+    console.error('No index found. Run `npx ctx-pilot auto-index` first.');
+    process.exit(1);
+  }
+
+  console.log('Validating index...\n');
+  const result = await validateIndex(projectRoot, config, index);
+  console.log(formatValidationResult(result));
+
+  if (!result.valid) {
+    process.exit(1);
+  }
+}
+
+async function getStaleFiles(projectRoot: string, index: ProjectIndex): Promise<Set<string>> {
+  const stale = new Set<string>();
+  const indexDate = new Date(index.lastUpdated);
+
+  for (const file of index.files) {
+    try {
+      const fileStat = await stat(join(projectRoot, file.path));
+      if (fileStat.mtime > indexDate) {
+        stale.add(file.path);
+      }
+    } catch {
+      // File deleted or inaccessible = stale
+      stale.add(file.path);
+    }
+  }
+
+  return stale;
+}
+
+function formatSuggestions(
+  pinnedFiles: string[],
+  results: ScoredSection[],
+  staleFiles: Set<string>,
+  maxSuggestions = 5
+): { text: string; hasStale: boolean } {
   const lines: string[] = [];
+  let hasStale = false;
 
   if (pinnedFiles.length > 0) {
     lines.push('**Pinned (always relevant):**');
@@ -496,11 +549,13 @@ function formatSuggestions(pinnedFiles: string[], results: ScoredSection[], maxS
     const top = results.slice(0, maxSuggestions);
     for (const r of top) {
       const lineRange = `lines ${r.section.lineStart}-${r.section.lineEnd}`;
-      lines.push(`- ${r.file} (${lineRange}) - ${r.section.title}`);
+      const staleMarker = staleFiles.has(r.file) ? ' ⚠️' : '';
+      if (staleFiles.has(r.file)) hasStale = true;
+      lines.push(`- ${r.file} (${lineRange}) - ${r.section.title}${staleMarker}`);
     }
   }
 
-  return lines.join('\n');
+  return { text: lines.join('\n'), hasStale };
 }
 
 async function runHook(): Promise<void> {
@@ -523,19 +578,54 @@ async function runHook(): Promise<void> {
     }
 
     const config = await loadConfig(projectRoot);
-    let index = await loadIndex(projectRoot);
-    if (!index) index = await buildIndex(projectRoot, config);
+
+    // Set domain-specific stopwords if configured
+    if (config.domainStopwords && config.domainStopwords.length > 0) {
+      setDomainStopwords(config.domainStopwords);
+    }
+
+    const index = await loadIndex(projectRoot);
+    if (!index) {
+      console.log(`<ctx-pilot>
+No index found. Ask your AI to: "Follow the instructions in .context/optimize.md"
+</ctx-pilot>`);
+      process.exit(0);
+    }
 
     const topics = extractTopics(data.prompt);
+    const hasPinned = config.pinned.length > 0;
+
+    // Smart skip: if fewer than 2 topics and no pinned files, stay silent
+    if (topics.length < 2 && !hasPinned) {
+      process.exit(0);
+    }
+
     const query = topics.join(' ');
     const results = query ? searchSections(index, query, { maxResults: 10 }) : [];
-    const suggestions = formatSuggestions(config.pinned, results);
+
+    // Smart skip: if no results score above threshold and no pinned files, stay silent
+    const MIN_SCORE_THRESHOLD = 1.0;
+    const hasRelevantResults = results.some((r) => r.score >= MIN_SCORE_THRESHOLD);
+    if (!hasRelevantResults && !hasPinned) {
+      process.exit(0);
+    }
+
+    // Filter results to only include those above threshold
+    const relevantResults = results.filter((r) => r.score >= MIN_SCORE_THRESHOLD);
+
+    // Check for stale files
+    const staleFiles = await getStaleFiles(projectRoot, index);
+    const { text: suggestions, hasStale } = formatSuggestions(config.pinned, relevantResults, staleFiles);
 
     if (suggestions) {
+      const staleNote = hasStale
+        ? '\n\n⚠️ Before answering, update .context/index.json for files marked ⚠️.'
+        : '';
+
       console.log(`<ctx-pilot>
 Look into these files for context:
 
-${suggestions}
+${suggestions}${staleNote}
 </ctx-pilot>`);
     }
 
@@ -556,8 +646,9 @@ Supported:
 Usage:
   npx ctx-pilot                Run as hook (reads from stdin)
   npx ctx-pilot init           Create config and install hook
-  npx ctx-pilot index          Rebuild the index
   npx ctx-pilot status         Show config, index, and hook status
+  npx ctx-pilot auto-index     Build index from source files
+  npx ctx-pilot validate       Check index for issues
 
 Hooks (dynamic, per-prompt):
   npx ctx-pilot hook           Install hook (auto-detects Claude/Gemini)
@@ -570,11 +661,8 @@ Exports (static files):
   npx ctx-pilot export --aider     Generate .aider.context.md
   npx ctx-pilot export --mdc       Generate .cursor/rules/ctx-pilot.mdc
 
-Watch (auto-regenerate on file changes):
-  npx ctx-pilot watch --cursor     Watch and update .cursorrules
-  npx ctx-pilot watch --windsurf   Watch and update .windsurfrules
-  npx ctx-pilot watch --aider      Watch and update .aider.context.md
-  npx ctx-pilot watch --all        Watch and update all exports
+Options:
+  --verbose, -v    Show detailed output (for auto-index)
 
 Config file: .context/config.json
 Index file:  .context/index.json
@@ -609,11 +697,17 @@ async function main(): Promise<void> {
     case 'init':
       await runInit(projectRoot, forceEnv);
       break;
-    case 'index':
-      await runIndex(projectRoot, args.includes('--force'));
-      break;
     case 'status':
       await runStatus(projectRoot);
+      break;
+    case 'auto-index':
+    case 'index':
+      await runAutoIndex(projectRoot, {
+        verbose: args.includes('--verbose') || args.includes('-v'),
+      });
+      break;
+    case 'validate':
+      await runValidate(projectRoot);
       break;
     case 'hook':
     case 'install':
@@ -628,13 +722,6 @@ async function main(): Promise<void> {
       for (const target of exportTargets) {
         await runExport(projectRoot, target);
       }
-      break;
-    case 'watch':
-      if (exportTargets.length === 0) {
-        console.error('Specify watch target: --cursor, --windsurf, --aider, --mdc, or --all');
-        process.exit(1);
-      }
-      await runWatch(projectRoot, exportTargets);
       break;
     case 'help':
     case '--help':

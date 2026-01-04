@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
-import { buildIndex, loadIndex, getIndexStats } from '../../src/indexer/index.js';
+import { buildAutoIndex, loadIndex, getIndexStats, saveIndex } from '../../src/indexer/index.js';
 import { saveConfig } from '../../src/config/index.js';
 import type { CtxPilotConfig } from '../../src/types.js';
 
@@ -36,15 +36,13 @@ describe('indexer integration', () => {
       pinned: [],
       include: ['**/*.md'],
       exclude: [],
-      tokenBudget: 32000,
-      maxContextPercentage: 50,
       ...config,
     };
     await saveConfig(testDir, fullConfig);
     return fullConfig;
   }
 
-  describe('buildIndex', () => {
+  describe('buildAutoIndex', () => {
     it('should index markdown files', async () => {
       await createTestFile('docs/guide.md', `# Getting Started
 
@@ -55,7 +53,7 @@ Welcome to the guide.
 Run npm install.`);
 
       const config = await setupConfig({ include: ['**/*.md'] });
-      const index = await buildIndex(testDir, config);
+      const index = await buildAutoIndex(testDir, config);
       const stats = getIndexStats(index);
 
       expect(stats.files).toBe(1);
@@ -67,7 +65,7 @@ Run npm install.`);
       await createTestFile('src/main.ts', 'function main() { return 1; }');
 
       const config = await setupConfig({ include: ['**/*.md', '**/*.ts'] });
-      const index = await buildIndex(testDir, config);
+      const index = await buildAutoIndex(testDir, config);
       const stats = getIndexStats(index);
 
       expect(stats.files).toBe(2);
@@ -81,7 +79,7 @@ Run npm install.`);
         include: ['**/*.md'],
         exclude: ['archive/**'],
       });
-      const index = await buildIndex(testDir, config);
+      const index = await buildAutoIndex(testDir, config);
       const stats = getIndexStats(index);
 
       expect(stats.files).toBe(1);
@@ -92,7 +90,7 @@ Run npm install.`);
       await mkdir(join(testDir, 'empty'), { recursive: true });
 
       const config = await setupConfig({ include: ['**/*.md'] });
-      const index = await buildIndex(testDir, config);
+      const index = await buildAutoIndex(testDir, config);
       const stats = getIndexStats(index);
 
       expect(stats.files).toBe(0);
@@ -102,7 +100,7 @@ Run npm install.`);
       await createTestFile('empty.txt', '');
 
       const config = await setupConfig({ include: ['**/*.txt'] });
-      const index = await buildIndex(testDir, config);
+      const index = await buildAutoIndex(testDir, config);
 
       // Empty files may still be indexed with 0 sections
       if (index.files.length > 0) {
@@ -112,32 +110,33 @@ Run npm install.`);
   });
 
   describe('incremental indexing', () => {
-    it('should reuse cached index for unchanged files', async () => {
+    it('should produce consistent results for unchanged files', async () => {
       await createTestFile('file.md', '# Test\n\nContent.');
 
       const config = await setupConfig();
 
       // First index
-      const index1 = await buildIndex(testDir, config);
+      const index1 = await buildAutoIndex(testDir, config);
 
-      // Second index (should reuse)
-      const index2 = await buildIndex(testDir, config);
+      // Second index (should produce same results)
+      const index2 = await buildAutoIndex(testDir, config);
 
-      expect(index2.files[0].hash).toBe(index1.files[0].hash);
+      // Same sections should be extracted
+      expect(index2.files[0].sections.length).toBe(index1.files[0].sections.length);
     });
 
     it('should re-index changed files', async () => {
       await createTestFile('file.md', '# Original');
 
       const config = await setupConfig();
-      const index1 = await buildIndex(testDir, config);
+      const index1 = await buildAutoIndex(testDir, config);
 
       // Modify file
       await createTestFile('file.md', '# Modified\n\n## New Section');
 
-      const index2 = await buildIndex(testDir, config);
+      const index2 = await buildAutoIndex(testDir, config);
 
-      expect(index2.files[0].hash).not.toBe(index1.files[0].hash);
+      // File content changed, so sections should differ
       expect(getIndexStats(index2).sections).toBeGreaterThan(getIndexStats(index1).sections);
     });
 
@@ -145,10 +144,10 @@ Run npm install.`);
       await createTestFile('file.md', '# Test');
 
       const config = await setupConfig();
-      await buildIndex(testDir, config);
+      await buildAutoIndex(testDir, config);
 
       // Force re-index
-      const index = await buildIndex(testDir, config, { force: true });
+      const index = await buildAutoIndex(testDir, config, { force: true });
 
       expect(index.files).toHaveLength(1);
     });
@@ -164,7 +163,8 @@ Run npm install.`);
       await createTestFile('file.md', '# Test');
 
       const config = await setupConfig();
-      await buildIndex(testDir, config);
+      const index = await buildAutoIndex(testDir, config);
+      await saveIndex(testDir, index);
 
       const loaded = await loadIndex(testDir);
 
@@ -188,7 +188,7 @@ Content 2.
 Content 3.`);
 
       const config = await setupConfig();
-      const index = await buildIndex(testDir, config);
+      const index = await buildAutoIndex(testDir, config);
 
       expect(index.files[0].sections.length).toBeGreaterThanOrEqual(3);
     });
@@ -205,7 +205,7 @@ class Bar {
 const baz = () => 2;`);
 
       const config = await setupConfig({ include: ['**/*.js'] });
-      const index = await buildIndex(testDir, config);
+      const index = await buildAutoIndex(testDir, config);
 
       expect(index.files[0].sections.length).toBeGreaterThanOrEqual(3);
     });
@@ -219,7 +219,7 @@ class MyClass:
         pass`);
 
       const config = await setupConfig({ include: ['**/*.py'] });
-      const index = await buildIndex(testDir, config);
+      const index = await buildAutoIndex(testDir, config);
 
       expect(index.files[0].sections.length).toBeGreaterThanOrEqual(2);
     });

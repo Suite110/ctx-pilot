@@ -3,26 +3,26 @@ export interface CtxPilotConfig {
   pinned: string[];
   include: string[];
   exclude: string[];
-  tokenBudget: number;
-  maxContextPercentage: number;
+  domainStopwords?: string[];
 }
 
-// Section detected within a file
+// Section in a file (as stored in index)
 export interface Section {
   title: string;
   lineStart: number;
   lineEnd: number;
-  preview: string;     // First ~100 chars for search preview
-  tokens: number;      // Estimated token count
-  keywords: string[];  // Extracted keywords for search
+  preview: string;
+  keywords: string[];
+  tokens?: number;
+  source?: 'auto' | 'ai';
 }
 
-// Index entry for a single file
+// File entry in the index
 export interface FileIndex {
   path: string;
-  mtime: string;       // ISO timestamp
-  hash: string;        // Content hash for change detection
   sections: Section[];
+  mtime?: string;
+  hash?: string;
 }
 
 // Complete project index
@@ -32,29 +32,49 @@ export interface ProjectIndex {
   files: FileIndex[];
 }
 
-// Search result with relevance score
+// Search result
 export interface ScoredSection {
   file: string;
   section: Section;
   score: number;
 }
 
-// Options for search
+// Search options
 export interface SearchOptions {
   maxResults?: number;
-  maxTokens?: number;
+  useStemming?: boolean;
+  useFuzzy?: boolean;
 }
 
-// Options for indexing
-export interface IndexOptions {
-  force?: boolean;
+// Hook input from stdin
+export interface HookInput {
+  prompt: string;
 }
 
 // Parser function signature
 export type SectionParser = (content: string, filePath: string) => Section[];
 
-// Input received by the hook
-export interface HookInput {
-  prompt: string;
-  transcript_path?: string;
+// Auto-index options
+export interface AutoIndexOptions {
+  force?: boolean;
+  verbose?: boolean;
+}
+
+// Validation types
+export interface ValidationResult {
+  valid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationWarning[];
+}
+
+export interface ValidationError {
+  type: 'missing_pinned' | 'invalid_line_numbers' | 'empty_keywords' | 'orphaned_entry';
+  file: string;
+  details: string;
+}
+
+export interface ValidationWarning {
+  type: 'stale_file' | 'large_section';
+  file: string;
+  details: string;
 }

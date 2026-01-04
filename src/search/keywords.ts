@@ -14,6 +14,17 @@ const STOPWORDS = new Set([
   'again', 'further', 'once', 'up', 'down', 'out', 'off', 'over',
 ]);
 
+// Domain-specific stopwords (set by user config)
+let domainStopwords: Set<string> = new Set();
+
+export function setDomainStopwords(words: string[]): void {
+  domainStopwords = new Set(words.map((w) => w.toLowerCase()));
+}
+
+function isStopword(word: string): boolean {
+  return STOPWORDS.has(word) || domainStopwords.has(word);
+}
+
 // Minimum keyword length
 const MIN_KEYWORD_LENGTH = 2;
 
@@ -27,10 +38,11 @@ export function extractKeywords(text: string): string[] {
   const words = text
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter(word =>
-      word.length >= MIN_KEYWORD_LENGTH &&
-      !STOPWORDS.has(word) &&
-      !/^\d+$/.test(word) // Filter pure numbers
+    .filter(
+      (word) =>
+        word.length >= MIN_KEYWORD_LENGTH &&
+        !isStopword(word) &&
+        !/^\d+$/.test(word) // Filter pure numbers
     );
 
   // Count occurrences

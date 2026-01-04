@@ -29,16 +29,6 @@ npm run dev
 node dist/cli.js help
 ```
 
-## Adding a Parser
-
-To support a new language:
-
-1. Create `src/indexer/parsers/yourlang.ts`
-2. Export a function matching `SectionParser` type
-3. Register it in `src/indexer/parsers/index.ts`
-
-See existing parsers for examples.
-
 ## Submitting Changes
 
 1. Fork the repo

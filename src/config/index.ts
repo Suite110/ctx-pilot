@@ -84,7 +84,5 @@ export function getDefaultConfig(): CtxPilotConfig {
     pinned: [],
     include: ['**/*.md'],
     exclude: [],
-    tokenBudget: 32000,
-    maxContextPercentage: 50,
   };
 }
