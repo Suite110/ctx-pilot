@@ -66,8 +66,21 @@ If ctx-pilot saves you time, consider [sponsoring the project](https://github.co
 
 - **Runs 100% locally** - No data leaves your machine. No API keys. No accounts.
 - **Scales with your codebase** - Tested on 44K+ lines across 73 files
-- **Team-friendly** - Share pinned files and index as team conventions
+- **Team-friendly** - Share indexes via git, track usage analytics
 - **Dual licensed** - Free for most, [commercial license](LICENSE-COMMERCIAL) for enterprises
+
+### Enterprise Features (v0.11.0+)
+
+| Feature | Command | Description |
+|---------|---------|-------------|
+| Index Quality | `npx ctx-pilot audit` | Score your index (0-100) with recommendations |
+| Team Sync | `npx ctx-pilot sync` | Pull team's index from git |
+| Analytics | `npx ctx-pilot stats` | View usage statistics (opt-in) |
+| Audit Log | `npx ctx-pilot audit-log` | Compliance logging (opt-in) |
+| Semantic Search | `npx ctx-pilot embed` | Add AI embeddings for meaning-based search |
+| Multi-Repo | `npx ctx-pilot link` | Search across linked repositories |
+
+All features are opt-in and run 100% locally.
 
 ---
 
@@ -166,6 +179,28 @@ Edit `.context/config.json`:
 | `minScore` | Minimum relevance score to show a result (default: 1.0). Lower = more results, higher = stricter. |
 | `excludeFromSuggestions` | Patterns to index but never suggest (e.g., `["tests/**"]` to index tests for completeness but not clutter suggestions) |
 | `domainStopwords` | Common project terms to ignore in search (e.g., your app name) |
+
+### Enterprise Config Options
+
+```json
+{
+  "team": { "remote": "git", "branch": "main" },
+  "analytics": { "enabled": true },
+  "auditLog": { "enabled": true, "retention": "30d" },
+  "suggestions": { "includeRelated": true, "maxRelated": 2 },
+  "search": { "enabled": true },
+  "linkedRepos": [{ "name": "shared-lib", "path": "../shared-lib" }]
+}
+```
+
+| Field | What it does |
+|-------|--------------|
+| `team` | Git branch for team sync (`sync`/`publish` commands) |
+| `analytics` | Enable usage statistics collection (local only) |
+| `auditLog` | Enable compliance logging with retention period |
+| `suggestions.includeRelated` | Show related files based on imports |
+| `search.enabled` | Enable semantic search (requires embeddings) |
+| `linkedRepos` | External repositories to include in search |
 
 ---
 
@@ -313,6 +348,7 @@ npx ctx-pilot status
 npx ctx-pilot init              # Set up config and install hook
 npx ctx-pilot status            # Show config, index, hooks, and exports
 npx ctx-pilot validate          # Check index for issues
+npx ctx-pilot audit             # Score index quality with recommendations
 npx ctx-pilot auto-index        # Build index automatically (fallback)
 npx ctx-pilot auto-index -v     # Build with verbose output
 npx ctx-pilot auto-index -f     # Force full rebuild (ignore cache)
@@ -321,6 +357,26 @@ npx ctx-pilot watch             # Auto-rebuild on file changes
 ```
 
 The primary way to build the index is asking your AI: `Follow the instructions in .context/optimize.md`
+
+### Enterprise Commands
+
+```bash
+# Team Sync
+npx ctx-pilot sync              # Pull team's index from git
+npx ctx-pilot publish           # Push index to team via git
+
+# Analytics (opt-in)
+npx ctx-pilot stats             # View usage statistics
+npx ctx-pilot audit-log         # View suggestion history (compliance)
+
+# Semantic Search (requires @xenova/transformers)
+npx ctx-pilot embed             # Add embeddings to existing index
+
+# Multi-Repo
+npx ctx-pilot link <path>       # Link external repository
+npx ctx-pilot unlink <name>     # Unlink repository
+npx ctx-pilot links             # List linked repositories
+```
 
 ### Dynamic Hooks (Claude Code, Gemini CLI)
 

@@ -2,6 +2,96 @@
 
 All notable changes to ctx-pilot will be documented in this file.
 
+## [0.11.0] - 2026-01-04
+
+### Enterprise Edition
+
+Full enterprise feature set making $149/year a no-brainer for teams. All features run 100% locally with no external API calls.
+
+### Added
+
+#### Index Quality Report
+- **`npx ctx-pilot audit`** - Score your index quality (0-100)
+  - Coverage stats: files indexed, sections with keywords, avg keywords/section
+  - Identifies weak sections with < 3 keywords
+  - Detects missing files that match include patterns
+  - Recommends files to pin and sections to enhance
+  - Actionable improvement suggestions
+
+#### Team Index Sync
+- **`npx ctx-pilot sync`** - Pull team's index from git
+  - Fetches from origin and compares timestamps
+  - Creates backup before overwriting local
+  - Conflict detection with --force option
+- **`npx ctx-pilot publish`** - Push index to team
+  - Commits and pushes to configured branch
+  - Custom commit message with -m flag
+- Team config in `.context/config.json`:
+  ```json
+  { "team": { "remote": "git", "branch": "main" } }
+  ```
+
+#### Usage Analytics
+- **`npx ctx-pilot stats`** - View usage statistics (last 30 days)
+  - Total suggestions and unique files
+  - Most valuable files (suggested most often)
+  - Top search topics
+  - Queries with no results (missing coverage)
+- Opt-in via config: `"analytics": { "enabled": true }`
+- All data stored locally in `.context/analytics.json`
+- Easy to clear: `npx ctx-pilot stats --clear`
+
+#### Audit Log (Compliance)
+- **`npx ctx-pilot audit-log`** - View suggestion history
+  - JSONL format for SIEM integration
+  - Prompt hashes (not content) for privacy
+  - Configurable retention period
+- Export: `npx ctx-pilot audit-log --export`
+- Opt-in via config: `"auditLog": { "enabled": true, "retention": "30d" }`
+
+#### Related Files
+- Suggest files that should be read together
+- Import/require relationship analysis (JS, TS, Python, Go)
+- Shows "imported by above" in suggestions
+- Opt-in via config: `"suggestions": { "includeRelated": true, "maxRelated": 2 }`
+
+#### Semantic Search
+- **`npx ctx-pilot embed`** - Add embeddings to existing index
+  - Uses all-MiniLM-L6-v2 via @xenova/transformers
+  - 384-dimension embeddings stored in index
+  - ~50MB model download on first use
+- Hybrid search: combines semantic + keyword scores
+- Opt-in via config: `"search": { "enabled": true }`
+- Optional dependency: `npm install @xenova/transformers`
+
+#### Multi-Repo Support
+- **`npx ctx-pilot link <path>`** - Link external repository
+- **`npx ctx-pilot unlink <name>`** - Unlink repository
+- **`npx ctx-pilot links`** - List linked repositories
+- Cross-repo search with prefixed file paths: `[shared-lib] src/utils.ts`
+- Config: `"linkedRepos": [{ "name": "shared-lib", "path": "../shared-lib" }]`
+
+### Changed
+
+- **Refactored CLI** - 90% code reduction in cli.ts (893 → 92 lines)
+  - Commands split into `src/commands/*.ts` modules
+  - Cleaner architecture for future extensions
+- **Expanded config schema** - New enterprise config sections
+
+### Architecture
+
+New modules added:
+- `src/commands/` - Modular command handlers
+- `src/audit/` - Index quality scoring
+- `src/sync/` - Git-based team sync
+- `src/audit-log/` - Compliance logging
+- `src/analytics/` - Usage statistics
+- `src/relations/` - Import-based file relationships
+- `src/search/semantic.ts` - Optional embedding search
+- `src/multi-repo/` - Cross-repository support
+
+---
+
 ## [0.10.0] - 2026-01-04
 
 ### Enterprise-Ready with Developer Tools

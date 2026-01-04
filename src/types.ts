@@ -1,4 +1,32 @@
 // Configuration types
+export interface TeamConfig {
+  remote: 'git';
+  branch: string;
+  path: string;
+}
+
+export interface AnalyticsConfig {
+  enabled: boolean;
+  storage: 'local';
+}
+
+export interface AuditLogConfig {
+  enabled: boolean;
+  path: string;
+  retention: string;
+}
+
+export interface SuggestionsConfig {
+  includeRelated: boolean;
+  maxRelated: number;
+}
+
+export interface SemanticSearchConfig {
+  enabled: boolean;
+  model: string;
+  weight: number;
+}
+
 export interface CtxPilotConfig {
   pinned: string[];
   include: string[];
@@ -7,6 +35,12 @@ export interface CtxPilotConfig {
   minTopics?: number;
   minScore?: number;
   excludeFromSuggestions?: string[];
+  // Enterprise features
+  team?: TeamConfig;
+  analytics?: AnalyticsConfig;
+  auditLog?: AuditLogConfig;
+  suggestions?: SuggestionsConfig;
+  search?: SemanticSearchConfig;
 }
 
 // Section in a file (as stored in index)
@@ -18,6 +52,7 @@ export interface Section {
   keywords: string[];
   tokens?: number;
   source?: 'auto' | 'ai';
+  embedding?: number[];
 }
 
 // File entry in the index
