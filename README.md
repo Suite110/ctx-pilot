@@ -1,9 +1,10 @@
 # ctx-pilot
 
-**Stop repeating yourself to AI.**
+**AI that knows your codebase.**
 
 [![npm version](https://img.shields.io/npm/v/ctx-pilot.svg)](https://www.npmjs.com/package/ctx-pilot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Sponsor](https://img.shields.io/github/sponsors/stephen-gobin?label=Sponsor&style=social)](https://github.com/sponsors/stephen-gobin)
 
 Works with **Claude Code**, **Gemini CLI**, **Cursor**, **Windsurf**, and **Aider**.
 
@@ -57,6 +58,17 @@ Claude: "I'll update the Widget component. Based on the props defined in
 - **Works offline** - Everything runs locally, no API keys or accounts needed
 - **Graceful degradation** - If something breaks, your AI tool works exactly as before
 
+If ctx-pilot saves you time, consider [sponsoring the project](https://github.com/sponsors/stephen-gobin).
+
+---
+
+## Enterprise Ready
+
+- **Runs 100% locally** - No data leaves your machine. No API keys. No accounts.
+- **Scales with your codebase** - Tested on 44K+ lines across 73 files
+- **Team-friendly** - Share pinned files and index as team conventions
+- **Dual licensed** - Free for most, [commercial license](LICENSE-COMMERCIAL) for enterprises
+
 ---
 
 ## Quick Start
@@ -77,6 +89,10 @@ Your AI analyzes your codebase and builds an optimized index. Done - ctx-pilot n
 ```bash
 npx ctx-pilot auto-index
 ```
+
+> Built for scale. Used to manage a 44K-line documentation project with 73 files.
+
+> **Free for most users.** [Commercial license](LICENSE-COMMERCIAL) required for companies with >$1M annual revenue.
 
 ---
 
@@ -145,7 +161,11 @@ Edit `.context/config.json`:
 |-------|--------------|
 | `pinned` | Files suggested on every prompt (your core docs) |
 | `include` | What to index (glob patterns) |
-| `exclude` | What to skip |
+| `exclude` | What to skip entirely |
+| `minTopics` | Minimum searchable terms to trigger suggestions (default: 2). Set to 0 for always-on. |
+| `minScore` | Minimum relevance score to show a result (default: 1.0). Lower = more results, higher = stricter. |
+| `excludeFromSuggestions` | Patterns to index but never suggest (e.g., `["tests/**"]` to index tests for completeness but not clutter suggestions) |
+| `domainStopwords` | Common project terms to ignore in search (e.g., your app name) |
 
 ---
 
@@ -268,6 +288,9 @@ Here's a complete config for a TypeScript project:
     "dist/**",
     "coverage/**"
   ],
+  "excludeFromSuggestions": ["tests/**"],
+  "minTopics": 2,
+  "minScore": 1.0,
   "domainStopwords": ["myproject"]
 }
 ```
@@ -287,11 +310,14 @@ npx ctx-pilot status
 ### Setup & Indexing
 
 ```bash
-npx ctx-pilot init            # Set up config and install hook
-npx ctx-pilot status          # Show config, index, hooks, and exports
-npx ctx-pilot validate        # Check index for issues
-npx ctx-pilot auto-index      # Build index automatically (fallback)
-npx ctx-pilot auto-index -v   # Build with verbose output
+npx ctx-pilot init              # Set up config and install hook
+npx ctx-pilot status            # Show config, index, hooks, and exports
+npx ctx-pilot validate          # Check index for issues
+npx ctx-pilot auto-index        # Build index automatically (fallback)
+npx ctx-pilot auto-index -v     # Build with verbose output
+npx ctx-pilot auto-index -f     # Force full rebuild (ignore cache)
+npx ctx-pilot search <query>    # Test what matches a query
+npx ctx-pilot watch             # Auto-rebuild on file changes
 ```
 
 The primary way to build the index is asking your AI: `Follow the instructions in .context/optimize.md`

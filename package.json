@@ -1,6 +1,6 @@
 {
   "name": "ctx-pilot",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Stop repeating yourself to AI. Auto-indexes your codebase and suggests relevant files before every prompt. Works with Claude Code, Gemini CLI, Cursor, Windsurf, and Aider.",
   "type": "module",
   "main": "dist/cli.js",

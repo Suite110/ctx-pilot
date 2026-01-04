@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFile, writeFile, mkdir, access, stat } from 'fs/promises';
+import { watch } from 'fs';
 import { join, dirname } from 'path';
 import { loadConfig, configExists, saveConfig, getDefaultConfig } from './config/index.js';
 import { loadIndex, getIndexStats, buildAutoIndex, saveIndex } from './indexer/index.js';
@@ -191,9 +192,14 @@ Analyze this codebase and build an optimized index for ctx-pilot.
    {
      "pinned": ["<core docs that are always relevant>"],
      "include": ["<glob patterns for files to index>"],
-     "exclude": ["node_modules/**", "dist/**", "<other build artifacts>"]
+     "exclude": ["node_modules/**", "dist/**", "<other build artifacts>"],
+     "excludeFromSuggestions": ["tests/**"],
+     "domainStopwords": ["<common project terms to ignore>"]
    }
    \`\`\`
+
+   - \`excludeFromSuggestions\`: Files to index but never suggest (e.g., tests for completeness)
+   - \`domainStopwords\`: Terms that appear everywhere and aren't useful for search
 
 3. **Build \`.context/index.json\`** by analyzing included files:
    \`\`\`json
@@ -213,7 +219,9 @@ Analyze this codebase and build an optimized index for ctx-pilot.
    }
    \`\`\`
 
-4. **Verify** with \`npx ctx-pilot validate\`
+4. **Verify** your index:
+   - \`npx ctx-pilot validate\` - Check for errors
+   - \`npx ctx-pilot search "authentication"\` - Test what matches a query
 
 ## CRITICAL: Add Synonyms to Keywords
 
@@ -426,6 +434,11 @@ async function runStatus(projectRoot: string): Promise<void> {
     console.log(`\nIndex (.context/index.json):`);
     console.log(`  Files: ${stats.files}`);
     console.log(`  Sections: ${stats.sections}`);
+    console.log(`  Keywords: ${stats.totalKeywords.toLocaleString()} total, ${stats.uniqueKeywords.toLocaleString()} unique`);
+    console.log(`  Avg sections/file: ${stats.avgSectionsPerFile}`);
+    if (stats.emptyFiles > 0) {
+      console.log(`  Empty files: ${stats.emptyFiles}`);
+    }
     console.log(`  Last updated: ${index.lastUpdated}`);
   } else {
     console.log(`\nIndex: Not built yet.`);
@@ -461,20 +474,21 @@ async function runStatus(projectRoot: string): Promise<void> {
   }
 }
 
-async function runAutoIndex(projectRoot: string, options: { verbose?: boolean }): Promise<void> {
+async function runAutoIndex(projectRoot: string, options: { verbose?: boolean; force?: boolean }): Promise<void> {
   if (!(await configExists(projectRoot))) {
     console.error('Not configured. Run `npx ctx-pilot init` first.');
     process.exit(1);
   }
 
   const config = await loadConfig(projectRoot);
+  const existingIndex = await loadIndex(projectRoot);
 
   console.log('Building auto-index...');
   if (options.verbose) {
     console.log('');
   }
 
-  const index = await buildAutoIndex(projectRoot, config, { verbose: options.verbose });
+  const index = await buildAutoIndex(projectRoot, config, { verbose: options.verbose, force: options.force }, existingIndex);
   await saveIndex(projectRoot, index);
 
   const stats = getIndexStats(index);
@@ -506,6 +520,112 @@ async function runValidate(projectRoot: string): Promise<void> {
   if (!result.valid) {
     process.exit(1);
   }
+}
+
+async function runSearch(projectRoot: string, query: string): Promise<void> {
+  if (!(await configExists(projectRoot))) {
+    console.error('Not configured. Run `npx ctx-pilot init` first.');
+    process.exit(1);
+  }
+
+  const config = await loadConfig(projectRoot);
+  const index = await loadIndex(projectRoot);
+
+  if (!index) {
+    console.error('No index found. Run `npx ctx-pilot auto-index` first.');
+    process.exit(1);
+  }
+
+  const topics = extractTopics(query);
+  console.log(`Topics extracted: ${topics.length > 0 ? topics.join(', ') : '(none)'}`);
+
+  if (topics.length === 0) {
+    console.log('\nNo searchable topics found in query.');
+    return;
+  }
+
+  const results = searchSections(index, topics.join(' '), { maxResults: 20 });
+
+  if (results.length === 0) {
+    console.log('\nNo matches found.');
+    return;
+  }
+
+  const minScore = config.minScore ?? 1.0;
+  console.log(`\nResults (${results.length} matches, threshold: ${minScore}):\n`);
+
+  for (const r of results) {
+    const marker = r.score >= minScore ? '✓' : '✗';
+    console.log(`${marker} [${r.score.toFixed(2)}] ${r.file}:${r.section.lineStart} - ${r.section.title}`);
+    console.log(`  Keywords: ${r.section.keywords.slice(0, 5).join(', ')}`);
+  }
+
+  const passing = results.filter((r) => r.score >= minScore).length;
+  console.log(`\n${passing} of ${results.length} results pass threshold.`);
+}
+
+async function runWatch(projectRoot: string): Promise<void> {
+  if (!(await configExists(projectRoot))) {
+    console.error('Not configured. Run `npx ctx-pilot init` first.');
+    process.exit(1);
+  }
+
+  const config = await loadConfig(projectRoot);
+
+  console.log('Watching for file changes... (Ctrl+C to stop)\n');
+
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let isRebuilding = false;
+
+  const rebuild = async () => {
+    if (isRebuilding) return;
+    isRebuilding = true;
+
+    try {
+      const existingIndex = await loadIndex(projectRoot);
+      const index = await buildAutoIndex(projectRoot, config, {}, existingIndex);
+      await saveIndex(projectRoot, index);
+      const stats = getIndexStats(index);
+      console.log(`[${new Date().toLocaleTimeString()}] Rebuilt: ${stats.files} files, ${stats.sections} sections`);
+    } catch (error) {
+      console.error(`[${new Date().toLocaleTimeString()}] Error:`, (error as Error).message);
+    } finally {
+      isRebuilding = false;
+    }
+  };
+
+  // Get directories to watch from include patterns
+  const dirsToWatch = new Set<string>();
+  for (const pattern of config.include) {
+    // Extract the base directory from the pattern
+    const parts = pattern.split('/');
+    if (parts[0] === '**') {
+      dirsToWatch.add('.');
+    } else if (parts[0] && !parts[0].includes('*')) {
+      dirsToWatch.add(parts[0]);
+    } else {
+      dirsToWatch.add('.');
+    }
+  }
+
+  // Set up watchers
+  for (const dir of dirsToWatch) {
+    const watchPath = join(projectRoot, dir);
+    try {
+      watch(watchPath, { recursive: true }, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(rebuild, 500);
+      });
+      console.log(`Watching: ${dir === '.' ? projectRoot : watchPath}`);
+    } catch {
+      // Directory might not exist, skip silently
+    }
+  }
+
+  console.log('');
+
+  // Keep process alive
+  await new Promise(() => {});
 }
 
 async function getStaleFiles(projectRoot: string, index: ProjectIndex): Promise<Set<string>> {
@@ -595,8 +715,12 @@ No index found. Ask your AI to: "Follow the instructions in .context/optimize.md
     const topics = extractTopics(data.prompt);
     const hasPinned = config.pinned.length > 0;
 
-    // Smart skip: if fewer than 2 topics and no pinned files, stay silent
-    if (topics.length < 2 && !hasPinned) {
+    // Smart skip: configurable thresholds
+    const minTopics = config.minTopics ?? 2;
+    const minScore = config.minScore ?? 1.0;
+
+    // Smart skip: if fewer than minTopics and no pinned files, stay silent
+    if (topics.length < minTopics && !hasPinned) {
       process.exit(0);
     }
 
@@ -604,14 +728,27 @@ No index found. Ask your AI to: "Follow the instructions in .context/optimize.md
     const results = query ? searchSections(index, query, { maxResults: 10 }) : [];
 
     // Smart skip: if no results score above threshold and no pinned files, stay silent
-    const MIN_SCORE_THRESHOLD = 1.0;
-    const hasRelevantResults = results.some((r) => r.score >= MIN_SCORE_THRESHOLD);
+    const hasRelevantResults = results.some((r) => r.score >= minScore);
     if (!hasRelevantResults && !hasPinned) {
       process.exit(0);
     }
 
     // Filter results to only include those above threshold
-    const relevantResults = results.filter((r) => r.score >= MIN_SCORE_THRESHOLD);
+    let relevantResults = results.filter((r) => r.score >= minScore);
+
+    // Filter out excludeFromSuggestions patterns
+    if (config.excludeFromSuggestions && config.excludeFromSuggestions.length > 0) {
+      const excludePatterns = config.excludeFromSuggestions;
+      relevantResults = relevantResults.filter((r) => {
+        return !excludePatterns.some((pattern) => {
+          // Simple glob matching: ** matches anything, * matches non-slash
+          const regex = new RegExp(
+            '^' + pattern.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$'
+          );
+          return regex.test(r.file);
+        });
+      });
+    }
 
     // Check for stale files
     const staleFiles = await getStaleFiles(projectRoot, index);
@@ -649,6 +786,8 @@ Usage:
   npx ctx-pilot status         Show config, index, and hook status
   npx ctx-pilot auto-index     Build index from source files
   npx ctx-pilot validate       Check index for issues
+  npx ctx-pilot search <query> Test what matches a query
+  npx ctx-pilot watch          Auto-rebuild on file changes
 
 Hooks (dynamic, per-prompt):
   npx ctx-pilot hook           Install hook (auto-detects Claude/Gemini)
@@ -663,6 +802,7 @@ Exports (static files):
 
 Options:
   --verbose, -v    Show detailed output (for auto-index)
+  --force, -f      Force full rebuild (ignore cache)
 
 Config file: .context/config.json
 Index file:  .context/index.json
@@ -704,10 +844,23 @@ async function main(): Promise<void> {
     case 'index':
       await runAutoIndex(projectRoot, {
         verbose: args.includes('--verbose') || args.includes('-v'),
+        force: args.includes('--force') || args.includes('-f'),
       });
       break;
     case 'validate':
       await runValidate(projectRoot);
+      break;
+    case 'search': {
+      const searchQuery = args.slice(1).join(' ');
+      if (!searchQuery) {
+        console.error('Usage: ctx-pilot search <query>');
+        process.exit(1);
+      }
+      await runSearch(projectRoot, searchQuery);
+      break;
+    }
+    case 'watch':
+      await runWatch(projectRoot);
       break;
     case 'hook':
     case 'install':

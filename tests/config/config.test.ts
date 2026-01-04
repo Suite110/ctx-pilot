@@ -62,7 +62,12 @@ describe('config module', () => {
 
       const validated = validateConfig(config);
 
-      expect(validated).toEqual(config);
+      // Should match input plus defaults for new fields
+      expect(validated.pinned).toEqual(config.pinned);
+      expect(validated.include).toEqual(config.include);
+      expect(validated.exclude).toEqual(config.exclude);
+      expect(validated.minTopics).toBe(2);
+      expect(validated.minScore).toBe(1);
     });
 
     it('should apply defaults for missing fields', () => {
@@ -109,7 +114,8 @@ describe('config module', () => {
       await saveConfig(testDir, config);
       const loaded = await loadConfig(testDir);
 
-      expect(loaded).toEqual(config);
+      // Should contain the saved fields (plus defaults)
+      expect(loaded).toMatchObject(config);
     });
   });
 
@@ -128,7 +134,8 @@ describe('config module', () => {
       await saveConfig(testDir, config);
       const loaded = await loadConfig(testDir);
 
-      expect(loaded).toEqual(config);
+      // Should contain the saved fields (plus defaults)
+      expect(loaded).toMatchObject(config);
     });
 
     it('should throw on invalid JSON', async () => {

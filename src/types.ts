@@ -4,6 +4,9 @@ export interface CtxPilotConfig {
   include: string[];
   exclude: string[];
   domainStopwords?: string[];
+  minTopics?: number;
+  minScore?: number;
+  excludeFromSuggestions?: string[];
 }
 
 // Section in a file (as stored in index)

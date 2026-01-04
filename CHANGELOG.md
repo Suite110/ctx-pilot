@@ -2,6 +2,41 @@
 
 All notable changes to ctx-pilot will be documented in this file.
 
+## [0.10.0] - 2026-01-04
+
+### Enterprise-Ready with Developer Tools
+
+New debugging tools, configurable thresholds, incremental builds, and enterprise positioning.
+
+### Added
+
+- **`npx ctx-pilot search <query>`** - Test what matches a query
+  - Shows extracted topics, matching sections, and scores
+  - Indicates which results pass the threshold
+- **`npx ctx-pilot watch`** - Auto-rebuild index on file changes
+  - Debounced rebuilds (500ms)
+  - Uses incremental updates for speed
+- **Configurable thresholds** - Tune smart skip behavior in config
+  - `minTopics` - Minimum topics to trigger suggestions (default: 2)
+  - `minScore` - Minimum relevance score threshold (default: 1.0)
+- **Negative patterns** - `excludeFromSuggestions` config option
+  - Index files for completeness, but never suggest them
+- **Incremental index updates** - Only re-index changed files
+  - Tracks file mtimes
+  - Use `--force` to bypass cache
+- **Enhanced status output** - More index statistics
+  - Total and unique keyword counts
+  - Average sections per file
+  - Empty file count
+- **PRICING.md** - Clear commercial licensing information
+
+### Changed
+
+- **Enterprise positioning** - README updated for larger teams
+- **Tagline** - "AI that knows your codebase"
+
+---
+
 ## [0.9.1] - 2026-01-04
 
 ### AI-Driven Indexing with Smart Search

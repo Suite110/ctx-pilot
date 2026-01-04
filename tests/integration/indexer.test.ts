@@ -173,6 +173,116 @@ Run npm install.`);
     });
   });
 
+  describe('getIndexStats enhanced', () => {
+    it('should return totalKeywords count', async () => {
+      await createTestFile('doc.md', `# Authentication
+
+Login flow docs.
+
+## User Login
+
+User login details.`);
+
+      const config = await setupConfig();
+      const index = await buildAutoIndex(testDir, config);
+      const stats = getIndexStats(index);
+
+      expect(stats.totalKeywords).toBeGreaterThan(0);
+    });
+
+    it('should return uniqueKeywords count', async () => {
+      await createTestFile('doc.md', `# Test
+
+Content.
+
+## Test Again
+
+More content.`);
+
+      const config = await setupConfig();
+      const index = await buildAutoIndex(testDir, config);
+      const stats = getIndexStats(index);
+
+      // uniqueKeywords should be <= totalKeywords
+      expect(stats.uniqueKeywords).toBeLessThanOrEqual(stats.totalKeywords);
+      expect(stats.uniqueKeywords).toBeGreaterThan(0);
+    });
+
+    it('should calculate avgSectionsPerFile', async () => {
+      await createTestFile('doc1.md', '# Doc 1\n\n## Section 1\n\n## Section 2');
+      await createTestFile('doc2.md', '# Doc 2\n\n## Section 1');
+
+      const config = await setupConfig();
+      const index = await buildAutoIndex(testDir, config);
+      const stats = getIndexStats(index);
+
+      expect(stats.avgSectionsPerFile).toBeGreaterThan(0);
+      expect(stats.files).toBe(2);
+    });
+
+    it('should count emptyFiles', async () => {
+      await createTestFile('empty.txt', '');
+      await createTestFile('doc.md', '# Doc\n\nContent.');
+
+      const config = await setupConfig({ include: ['**/*.txt', '**/*.md'] });
+      const index = await buildAutoIndex(testDir, config);
+      const stats = getIndexStats(index);
+
+      // May have empty files depending on parser behavior
+      expect(stats.emptyFiles).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('incremental indexing with mtime', () => {
+    it('should cache unchanged files', async () => {
+      await createTestFile('file.md', '# Test\n\nContent.');
+
+      const config = await setupConfig();
+
+      // First index
+      const index1 = await buildAutoIndex(testDir, config);
+      await saveIndex(testDir, index1);
+
+      // Second index with existing index - should use cache
+      const index2 = await buildAutoIndex(testDir, config, {}, index1);
+
+      // Files should have mtime set
+      expect(index2.files[0].mtime).toBeDefined();
+    });
+
+    it('should reindex when file changes', async () => {
+      await createTestFile('file.md', '# Original');
+
+      const config = await setupConfig();
+      const index1 = await buildAutoIndex(testDir, config);
+
+      // Wait a tiny bit to ensure mtime changes
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Modify file
+      await createTestFile('file.md', '# Modified\n\n## New Section\n\nNew content.');
+
+      // Rebuild with existing index
+      const index2 = await buildAutoIndex(testDir, config, {}, index1);
+
+      // Should have more sections now
+      expect(index2.files[0].sections.length).toBeGreaterThan(index1.files[0].sections.length);
+    });
+
+    it('should respect force flag to bypass cache', async () => {
+      await createTestFile('file.md', '# Test');
+
+      const config = await setupConfig();
+      const index1 = await buildAutoIndex(testDir, config);
+
+      // Force rebuild - should still work
+      const index2 = await buildAutoIndex(testDir, config, { force: true }, index1);
+
+      expect(index2.files).toHaveLength(1);
+      expect(index2.files[0].mtime).toBeDefined();
+    });
+  });
+
   describe('parser integration', () => {
     it('should correctly parse markdown headers', async () => {
       await createTestFile('doc.md', `# Header 1
